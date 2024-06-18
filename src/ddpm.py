@@ -56,6 +56,7 @@ class DDPMSampler:
 
     # This function describes how we can remove the noise given a latent, based on the noise that was predicted by the UNET
     # In the paper, the algorithm 2 and the eq (11) describes how to remove the noise once the UNET has predicted it. and go from X_t to X_t-1
+    # This function implements eq (11), the algorithm 2 is not implemented here.
     def step(self, timestep: int, latents: torch.Tensor, model_output: torch.Tensor) -> torch.FloatTensor:
         t = timestep
         prev_t = self._get_previous_timestep(t)
