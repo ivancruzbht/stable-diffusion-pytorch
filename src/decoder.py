@@ -22,9 +22,8 @@ class VAE_AttentionBlock(nn.Module):
         x = x.transpose(-1,-2) # (B, C, H*W) -> (B, H*W, C)
         x = self.attention(x) # (B, H*W, C) -> (B, H*W, C)
         x = x.transpose(-1,-2) # (B, H*W, C) -> (B, C, H*W)
-        x - x.view(B, C, H, W) # (B, C, H*W) -> (B, C, H, W)
+        x = x.view(B, C, H, W) # (B, C, H*W) -> (B, C, H, W)
         x = x + residue
-
         return x
 
 
@@ -71,36 +70,36 @@ Use in Convolutional Neural Networks
 class VAE_ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.group_norm1 = nn.GroupNorm(32, in_channels)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.groupnorm_1 = nn.GroupNorm(32, in_channels)
+        self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
 
-        self.group_norm2 = nn.GroupNorm(32, out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.groupnorm_2 = nn.GroupNorm(32, out_channels)
+        self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
 
         # This is the residual connection or skip connection, 
         if in_channels == out_channels:
-            self.residual = nn.Identity()
+            self.residual_layer  = nn.Identity()
         else:
-            self.residual = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+            self.residual_layer  = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
 
-    def forward(self, x: torch.Tensonr) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, H, W)
 
         residue = x
-        x = self.group_norm1(x) # Still (B, C, H, W)
+        x = self.groupnorm_1(x) # Still (B, C, H, W)
         x = F.silu(x) # # Still (B, C, H, W)
-        x = self.conv1(x) # Still (B, C, H, W)
-        x = self.group_norm2(x) # Still (B, C, H, W)
+        x = self.conv_1(x) # Still (B, C, H, W)
+        x = self.groupnorm_2(x) # Still (B, C, H, W)
         x = F.silu(x) # Still (B, C, H, W)
-        x = self.conv2(x) # Still (B, C, H, W)
+        x = self.conv_2(x) # Still (B, C, H, W)
 
         # Residual connection
-        return x + self.residual(residue)
+        return x + self.residual_layer(residue)
 
 class VAE_Decoder(nn.Sequential):
     def __init__(self):
         super().__init__(
-            nn.Conv2d(8, 4, kernel_size=1, padding=0), # (B, 8, H/8, W/8) -> (B, 4, H/8, W/8)
+            nn.Conv2d(4, 4, kernel_size=1, padding=0), # (B, 4, H/8, W/8) -> (B, 4, H/8, W/8)
             nn.Conv2d(4, 512, kernel_size=3, padding=1), # (B, 4, H/8, W/8) -> (B, 512, H/8, W/8)
             VAE_ResidualBlock(512, 512), # (B, 512, H/8, W/8) -> (B, 512, H/8, W/8)
             VAE_AttentionBlock(512), # (B, 512, H/8, W/8) -> (B, 512, H/8, W/8)
@@ -116,7 +115,8 @@ class VAE_Decoder(nn.Sequential):
             VAE_ResidualBlock(512, 512), # (B, 512, H/8, W/8) -> (B, 512, H/8, W/8)
             VAE_ResidualBlock(512, 512), # (B, 512, H/8, W/8) -> (B, 512, H/8, W/8)
 
-            # Now we need to scale up the image to the original size.
+            # Now we need to scale up the image to the original size. 
+            # Repeats the rows and columns of the data by scale_factor (like when you resize an image by doubling its size).
             nn.Upsample(scale_factor=2), # (B, 512, H/4, W/4) -> (B, 512, H/2, W/2)
             nn.Conv2d(512,512, kernel_size=3, padding=1), # (B, 512, H/2, W/2) -> (B, 512, H/2, W/2)
             VAE_ResidualBlock(512, 256), # (B, 512, H/2, W/2) -> (B, 256, H/2, W/2)
