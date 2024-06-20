@@ -25,10 +25,11 @@ def generate(prompt: str,
     with torch.no_grad():
         if not (0 < strength <=1):
             raise ValueError("Strength must be between 0 and 1")
+        
         if idle_device:
-            to_idle: lambda x: x.to(idle_device)
+            to_idle = lambda x: x.to(idle_device)
         else:
-            to_idle: lambda x: x
+            to_idle = lambda x: x
         
         generator = torch.Generator(device=device)
         if seed is None:
@@ -43,13 +44,13 @@ def generate(prompt: str,
         # then we mix the two outputs according to the cfg scale
         if do_cfg:
             # convert prompt into tokes using the tokenizer
-            cond_tokens = tokenizer.batch_encode_plus([prompt], padding='max_length', max_lenght=77).input_ids
+            cond_tokens = tokenizer.batch_encode_plus([prompt], padding='max_length', max_length=77).input_ids
             # Convert tokens to tensor (B, T)
             cond_tokens = torch.tensor(cond_tokens, dtype=torch.long, device=device)
             # (B, T) -> (B, T, C) or (B, T, 768)
             cond_tokens = clip(cond_tokens).to(device)
 
-            uncond_tokens = tokenizer.batch_encode_plus([uncond_prompt], padding='max_length', max_lenght=77).input_ids
+            uncond_tokens = tokenizer.batch_encode_plus([uncond_prompt], padding='max_length', max_length=77).input_ids
             uncond_tokens = torch.tensor(uncond_tokens, dtype=torch.long, device=device)
             # (B, T) -> (B, T, C) or (B, T, 768)
             uncond_tokens = clip(uncond_tokens).to(device)
@@ -58,7 +59,7 @@ def generate(prompt: str,
             context = torch.cat((cond_tokens, uncond_tokens))
         else:
             # Conver it into a list of tokens
-            tokens = tokenizer.batch_encode_plus([prompt], padding='max_length', max_lenght=77).input_ids
+            tokens = tokenizer.batch_encode_plus([prompt], padding='max_length', max_length=77).input_ids
             tokens = torch.tensor(tokens, dtype=torch.long, device=device)
             context = clip(tokens).to(device)
 
@@ -66,7 +67,7 @@ def generate(prompt: str,
 
         if sampler_name == 'ddpm':
             sampler = DDPMSampler(generator)
-            sampler.set_inference_steps(n_inference_steps)
+            sampler.set_inference_timesteps(n_inference_steps)
         else:
             raise ValueError(f"Unknown sampler: {sampler_name}")
         
@@ -99,7 +100,7 @@ def generate(prompt: str,
         # If we don't have an input image, we start with random noise
         else:
             latents = torch.randn(latents_shape, generator=generator, device=device)
-            sampler.set_strengh(strength=strength)
+            sampler.set_strength(strength=strength)
 
         diffusion = models['diffusion']
         diffusion.to(device)
@@ -135,20 +136,18 @@ def generate(prompt: str,
 
         images = rescale(images, (-1,1), (0,255), clamp=True)
         # (B, C, H, W) -> (B, H, W, C)
-        images.permute(0, 2, 3, 1)
-        images = images.cpu().numpy()
+        images = images.permute(0, 2, 3, 1)
+        images = images.to("cpu", torch.uint8).numpy()
         return images[0]
 
 def rescale(x, old_range, new_range, clamp=False):
     old_min, old_max = old_range
     new_min, new_max = new_range
-
-    x = x - old_min
-    x = x * (new_max - new_min) / (old_max - old_min) + new_min
-
+    x -= old_min
+    x *= (new_max - new_min) / (old_max - old_min)
+    x += new_min
     if clamp:
-        x = torch.clamp(x, new_min, new_max)
-    
+        x = x.clamp(new_min, new_max)
     return x
 
 # Time embedding is a vector that represents the current timestep
@@ -160,6 +159,6 @@ def get_time_embedding(timestep):
     # (1,160)
     x = torch.tensor([timestep], dtype=torch.float32)[:, None] * freqs[None]
     # (1,160) -> (1,320)
-    return torch.cat([torch.sin(x), torch.cos(x)], dim=-1)
+    return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
 
 
