@@ -4,4 +4,6 @@ This is my implementation of the tutorial "Coding stable diffusion from scratch 
 
 Annotated with lots of my own comments for my own education 
 
-Inference only
+Inference only. 
+
+Includes a demo notebook to generate images from prompts
